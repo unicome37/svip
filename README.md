@@ -1,7 +1,14 @@
 # SVIP v1.0
 
+[![GitHub](https://img.shields.io/badge/GitHub-unicome37%2Fsvip-blue?logo=github)](https://github.com/unicome37/svip)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.0.0-orange.svg)](https://github.com/unicome37/svip/releases)
+
 > **慢变量投资池系统 (Slow Variable Investment Pool)**  
 > 基于 A1-A11 理论体系的结构化投资框架
+
+📚 [完整文档](MANUAL.md) | 🚀 [快速开始](#快速开始) | 📖 [使用指南](USAGE.md) | 🎯 [快速参考](QUICK_REFERENCE.md)
 
 ## 系统定位
 
