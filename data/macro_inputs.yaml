@@ -1,0 +1,23 @@
+# SVIP 宏观数据输入（月度更新）
+# 手动填写或通过 FRED API 自动获取
+
+macro:
+  # 利率结构
+  yield_spread_10y2y: 0.35    # 10Y-2Y利差 (%)
+  real_yield: 1.8             # 实际利率 (%)
+  credit_spread: 3.2          # 高收益信用利差 (%)
+
+  # 流动性
+  m2_yoy: 0.04               # M2同比增速
+  fci: 0.1                   # 金融条件指数
+  credit_growth: 0.03         # 银行信贷增长
+
+  # 盈利周期
+  earnings_yoy: 0.08          # 标普500盈利同比
+  ism_new_orders: 53.5        # ISM新订单
+
+# 尾部风险
+tail_risk:
+  vix: 18.5
+  credit_spread_change: 0.2   # 月度信用利差变化
+  regulatory_intensity: 10.0  # 监管强度 (0-100)

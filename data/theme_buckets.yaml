@@ -1,0 +1,58 @@
+# SVIP 慢变量主题桶定义
+# 每家公司只能归入一个主桶
+
+theme_buckets:
+  "AI/算力密度":
+    description: "AI、云计算、半导体设备、数据中心"
+    value_capture_nodes:
+      - "半导体制造设备"
+      - "GPU设计"
+      - "云计算平台"
+      - "数据中心基础设施"
+    typical_stocks:
+      - {symbol: "MSFT", name: "Microsoft"}
+      - {symbol: "NVDA", name: "NVIDIA"}
+      - {symbol: "ASML", name: "ASML"}
+      - {symbol: "TSM", name: "TSMC"}
+
+  "老龄化/医疗支付":
+    description: "医疗服务、慢病药物、医疗保险、医疗数据"
+    value_capture_nodes:
+      - "医疗服务支付系统"
+      - "慢病药物"
+      - "医疗保险管理"
+      - "医疗数据基础设施"
+    typical_stocks:
+      - {symbol: "UNH", name: "UnitedHealth"}
+      - {symbol: "LLY", name: "Eli Lilly"}
+      - {symbol: "JNJ", name: "J&J"}
+
+  "金融制度/支付清算":
+    description: "支付网络、信用评级、交易清算"
+    value_capture_nodes:
+      - "支付网络"
+      - "信用评级"
+      - "交易清算系统"
+    typical_stocks:
+      - {symbol: "V", name: "Visa"}
+      - {symbol: "MA", name: "Mastercard"}
+      - {symbol: "SPGI", name: "S&P Global"}
+      - {symbol: "MCO", name: "Moody's"}
+
+  "品牌/代际消费":
+    description: "高端消费品牌、零售平台"
+    value_capture_nodes:
+      - "品牌资本沉淀"
+      - "零售网络效应"
+    typical_stocks:
+      - {symbol: "LVMUY", name: "LVMH"}
+      - {symbol: "COST", name: "Costco"}
+      - {symbol: "NKE", name: "Nike"}
+
+  "能源转型/电气化":
+    description: "可再生能源、电动车、储能"
+    value_capture_nodes:
+      - "电池技术"
+      - "充电基础设施"
+      - "电网升级"
+    typical_stocks: []

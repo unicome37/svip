@@ -1,0 +1,41 @@
+# SVIP 慢变量清单（年度更新）
+# 未来10年确定性最高的慢变量
+
+slow_variables:
+  - name: "AI算力密度提升"
+    time_horizon: "15年"
+    certainty: "高"
+    theme: "AI/算力密度"
+    proxy_indicators:
+      - "GPU出货量增速"
+      - "$/FLOP下降速度"
+      - "超大规模CAPEX"
+      - "企业AI采用率"
+
+  - name: "全球老龄化"
+    time_horizon: "30年"
+    certainty: "极高"
+    theme: "老龄化/医疗支付"
+    proxy_indicators:
+      - "65岁以上人口占比"
+      - "医疗支出/GDP"
+      - "慢病诊断率"
+      - "医保渗透率"
+
+  - name: "金融基础设施制度化"
+    time_horizon: "持续"
+    certainty: "高"
+    theme: "金融制度/支付清算"
+    proxy_indicators:
+      - "非现金支付比例"
+      - "跨境交易规模"
+      - "评级市场规模"
+
+  - name: "能源结构转型"
+    time_horizon: "20年"
+    certainty: "中高"
+    theme: "能源转型/电气化"
+    proxy_indicators:
+      - "可再生能源占比"
+      - "电动车渗透率"
+      - "储能装机量"
