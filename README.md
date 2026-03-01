@@ -268,16 +268,26 @@ svip/
 4. 估值安全垫不能防止系统性崩盘
 5. 系统会限制极端仓位、抑制短期爆发
 
-## 与 SPUD-INVEST 的关系
+## 慢变量统一投资框架
 
-| 系统 | 定位 | 输出 |
-|------|------|------|
-| **SPUD-INVEST** | 仓位边界系统 | 允许风险暴露区间 |
-| **SVIP** | 股票选择系统 | 慢变量对齐的投资池 |
+SVIP 是三系统协同框架的 **Stage 1（慢变量筛选）**：
 
-两者互补：
-- SPUD-INVEST 决定"买多少"（仓位上限）
-- SVIP 决定"买什么"（结构质量 + 估值 + 相位）
+| 阶段 | 系统 | 仓库 | 定位 |
+|------|------|------|------|
+| **Stage 1** | **SVIP** | [unicome37/svip](https://github.com/unicome37/svip) | 慢变量宇宙筛选 → Core/Watch/Block 池 |
+| **Stage 2** | **AIRS-X** | [unicome37/airs-x](https://github.com/unicome37/airs-x) | 深度结构分析 + 存在性审计 → SPUD 评分 + Grade |
+| **Stage 3** | **SPUD-INVEST** | [unicome37/spud-invest](https://github.com/unicome37/spud-invest) | 仓位边界约束 → SMI×MTI → 允许风险暴露 |
+
+数据流：
+```
+SVIP Core 池 → AIRS-X 深度分析 → SPUD-INVEST 仓位约束 → 最终执行组合
+```
+
+协同规则：
+- **SVIP** 决定"买什么"（结构质量 + 估值 + 相位）
+- **AIRS-X** 决定"值不值得买"（SPUD 四维评分 + 存在性审计）
+- **SPUD-INVEST** 决定"买多少"（仓位上限 + Core/Overlay 结构）
+- 任何一个系统说"不"，都不能建仓
 
 ## 理论基础
 
