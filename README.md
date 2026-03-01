@@ -71,8 +71,20 @@ pip install -e .
 
 ### 2. 运行示例
 
+#### YAML模式（原有方式）
+
 ```bash
 python run_svip.py
+```
+
+#### 数据库模式（推荐）
+
+```bash
+# A股分析
+python run_svip_db.py --stocks-list data/stocks_list_example.txt --market CN
+
+# 美股分析
+python run_svip_db.py --stocks-list stocks_us.txt --market US --theme-map data/theme_map_example.yaml
 ```
 
 ### 3. 查看报告
@@ -81,7 +93,7 @@ python run_svip.py
 
 ## 使用指南
 
-### 基础用法
+### YAML模式（原有方式）
 
 ```bash
 # 使用默认示例数据
@@ -96,6 +108,31 @@ python run_svip.py --market CN
 # 不保存报告（仅控制台输出）
 python run_svip.py --no-save
 ```
+
+### 数据库模式（新增）
+
+```bash
+# 从本地数据库加载A股
+python run_svip_db.py --stocks-list stocks_cn.txt --market CN --theme-map themes.yaml
+
+# 从本地数据库加载美股
+python run_svip_db.py --stocks-list stocks_us.txt --market US --theme-map themes.yaml
+
+# 自定义数据库路径
+python run_svip_db.py \
+  --stocks-list stocks.txt \
+  --market CN \
+  --china-db /path/to/china_a_stocks.db \
+  --us-db /path/to/us_stocks_financial_data.db
+```
+
+**数据库模式优势**：
+- ✅ 自动从数据库提取10年历史财务数据
+- ✅ 自动计算ROIC、FCF转化率、毛利率波动等指标
+- ✅ 支持批量处理大量股票
+- ✅ 数据一致性更好，减少人工输入错误
+
+详细说明请参考 [DATABASE_MODE_GUIDE.md](DATABASE_MODE_GUIDE.md)
 
 ### 数据文件格式
 
