@@ -35,6 +35,7 @@ from src.portfolio_engine import generate_report
 from src.report_generator import save_report
 from src.data_loader import validate_stock_themes
 from src.db_loader import create_db_loader
+from src.airsx_bridge import enrich_batch
 
 
 def load_yaml(path: str) -> dict:
@@ -111,6 +112,9 @@ def build_stocks_from_db(
         # 批量加载
         stocks_data = db_loader.load_stocks_from_list(stock_list)
         print(f"   成功加载 {len(stocks_data)}/{len(stock_codes)} 只股票")
+        
+        # AIRS-X 桥接补充主观评估字段
+        stocks_data = enrich_batch(stocks_data)
         
         # 转换为SVIPStock
         stocks = []
@@ -375,7 +379,7 @@ def main():
             print(f"   {v}")
     
     # 保存报告
-    if not args.no-save:
+    if not args.no_save:
         report_dir = os.path.join(base_dir, "reports")
         filepath = save_report(report, report_dir)
         print(f"\n📄 报告已保存: {filepath}")

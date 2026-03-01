@@ -131,7 +131,7 @@ class SVIPDatabaseLoader:
     
     def _get_china_company_info(self, code: str) -> Optional[Dict]:
         """获取A股公司信息"""
-        query = "SELECT * FROM companies WHERE code = ?"
+        query = "SELECT * FROM companies WHERE stock_code = ?"
         cursor = self.china_conn.execute(query, (code,))
         row = cursor.fetchone()
         return dict(row) if row else None
@@ -141,11 +141,13 @@ class SVIPDatabaseLoader:
         company_id: int,
         years: int = 10
     ) -> List[Dict]:
-        """获取A股历史财务数据（年报）"""
+        """获取A股历史财务数据（年报，Q4 或 report_period 为 NULL 的年度报告）"""
         query = """
         SELECT * FROM financial_data
-        WHERE company_id = ? AND report_type = 'annual'
-        ORDER BY report_date DESC
+        WHERE company_id = ?
+          AND (report_period = 'Q4' OR report_period IS NULL
+               OR report_period LIKE '%%1231')
+        ORDER BY fiscal_year DESC
         LIMIT ?
         """
         cursor = self.china_conn.execute(query, (company_id, years))
@@ -188,10 +190,10 @@ class SVIPDatabaseLoader:
         )
         
         return {
-            "symbol": company['code'],
-            "name": company['name'],
+            "symbol": company['stock_code'],
+            "name": company['company_name'],
             "market": "CN",
-            "sector": company.get('sector', ''),
+            "sector": company.get('industry_name', ''),
             "theme": theme,
             "financials": {
                 "roic_10y_median": roic_10y_median,
@@ -208,12 +210,13 @@ class SVIPDatabaseLoader:
                 "fcf_yield": fcf_yield,
                 "pe_ratio": pe_ratio,
                 "growth_rate": growth_rate,
-                "valuation_percentile": 0.5,  # 需要历史估值数据
+                "valuation_percentile": self._calculate_china_valuation_percentile(
+                    company['company_id'], pe_ratio
+                ),
                 "growth_concentration": 0.3,  # 需要分析师预测数据
-                "reinvestment_declining_years": 0,
+                "reinvestment_declining_years": self._calculate_reinvestment_declining_years(financials),
             },
             "acceleration": {
-                # 加速数据需要额外时间序列，暂时留空
                 "penetration": None,
                 "cost_curve": None,
                 "capex": self._extract_capex_series(financials),
@@ -308,9 +311,11 @@ class SVIPDatabaseLoader:
                 "fcf_yield": fcf_yield,
                 "pe_ratio": pe_ratio,
                 "growth_rate": growth_rate,
-                "valuation_percentile": 0.5,
+                "valuation_percentile": self._calculate_us_valuation_percentile(
+                    financials, pe_ratio
+                ),
                 "growth_concentration": 0.3,
-                "reinvestment_declining_years": 0,
+                "reinvestment_declining_years": self._calculate_us_reinvestment_declining_years(financials),
             },
             "acceleration": {
                 "penetration": None,
@@ -454,13 +459,82 @@ class SVIPDatabaseLoader:
         return fcf_yield, pe_ratio, growth_rate
     
     def _extract_capex_series(self, financials: List[Dict]) -> Optional[List[float]]:
-        """提取资本开支时间序列（最近5年）"""
+        """提取资本开支时间序列（最近5年）
+        
+        A股数据库无独立 capex 字段，用 operating_cash_flow - free_cash_flow 近似。
+        """
         capex_list = []
         for f in financials[:5]:
             capex = f.get('capex')
             if capex:
                 capex_list.append(abs(capex))
+            else:
+                ocf = f.get('operating_cash_flow') or 0
+                fcf = f.get('free_cash_flow') or 0
+                if ocf and fcf:
+                    capex_list.append(abs(ocf - fcf))
         return capex_list if capex_list else None
+    
+    def _calculate_china_valuation_percentile(
+        self, company_id: int, current_pe: float
+    ) -> float:
+        """
+        计算A股当前PE在历史PE分布中的分位数。
+        
+        从 financial_data 取该公司所有年份的 pe_ttm，
+        计算 current_pe 在历史分布中的百分位（0=极便宜, 1=极贵）。
+        """
+        if not self.china_conn or not current_pe or current_pe <= 0:
+            return 0.5
+        
+        query = """
+        SELECT pe_ttm FROM financial_data
+        WHERE company_id = ? AND pe_ttm IS NOT NULL AND pe_ttm > 0
+        ORDER BY fiscal_year
+        """
+        cursor = self.china_conn.execute(query, (company_id,))
+        pe_history = [row[0] for row in cursor.fetchall()]
+        
+        if len(pe_history) < 5:
+            return 0.5
+        
+        below = sum(1 for p in pe_history if p <= current_pe)
+        return round(below / len(pe_history), 3)
+    
+    def _calculate_reinvestment_declining_years(self, financials: List[Dict]) -> int:
+        """
+        计算资本开支连续递减年数。
+        
+        从最近年份向前数，capex 逐年递减的连续年数。
+        A股 capex 近似 = operating_cash_flow - free_cash_flow。
+        """
+        capex_series = []
+        for f in financials[:8]:
+            capex = f.get('capex')
+            if capex is None:
+                ocf = f.get('operating_cash_flow') or 0
+                fcf = f.get('free_cash_flow') or 0
+                if ocf and fcf:
+                    capex = abs(ocf - fcf)
+                else:
+                    capex = None
+            else:
+                capex = abs(capex)
+            capex_series.append(capex)
+        
+        # capex_series[0] = 最近一年, [1] = 前一年 ...
+        declining = 0
+        for i in range(len(capex_series) - 1):
+            curr = capex_series[i]
+            prev = capex_series[i + 1]
+            if curr is None or prev is None or prev <= 0:
+                break
+            if curr < prev:
+                declining += 1
+            else:
+                break
+        
+        return declining
     
     # =========================================================================
     # 财务指标计算（美股）
@@ -571,6 +645,55 @@ class SVIPDatabaseLoader:
             if capx:
                 capex_list.append(abs(capx))
         return capex_list if capex_list else None
+    
+    def _calculate_us_valuation_percentile(
+        self, financials: List[Dict], current_pe: float
+    ) -> float:
+        """
+        计算美股当前PE在历史PE分布中的分位数。
+        
+        从 financial_data_annual 提取历史 PE（prcc_f / epsfi），
+        计算 current_pe 在历史分布中的百分位（0=极便宜, 1=极贵）。
+        """
+        if not current_pe or current_pe <= 0:
+            return 0.5
+        
+        pe_history = []
+        for f in financials:
+            prcc_f = f.get('prcc_f')
+            epsfi = f.get('epsfi')
+            if prcc_f and epsfi and epsfi > 0:
+                pe_history.append(prcc_f / epsfi)
+        
+        if len(pe_history) < 5:
+            return 0.5
+        
+        below = sum(1 for p in pe_history if p <= current_pe)
+        return round(below / len(pe_history), 3)
+    
+    def _calculate_us_reinvestment_declining_years(self, financials: List[Dict]) -> int:
+        """
+        计算美股资本开支连续递减年数。
+        
+        从最近年份向前数，capx 逐年递减的连续年数。
+        """
+        capex_series = []
+        for f in financials[:8]:
+            capx = f.get('capx')
+            capex_series.append(abs(capx) if capx else None)
+        
+        declining = 0
+        for i in range(len(capex_series) - 1):
+            curr = capex_series[i]
+            prev = capex_series[i + 1]
+            if curr is None or prev is None or prev <= 0:
+                break
+            if curr < prev:
+                declining += 1
+            else:
+                break
+        
+        return declining
 
 
 # ===============================================================================
