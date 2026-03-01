@@ -10,7 +10,7 @@ Step 3: 分级（Core / Watch / Block）
 """
 import numpy as np
 from typing import Optional, Dict
-from config.settings import settings, SVIConfig
+from config.settings import settings, SVIConfig, MARKET_PARAMS
 from src.models import SVIScore, SVILevel
 
 
@@ -88,11 +88,13 @@ def score_substitution_risk(risk_rating: float) -> float:
     return clamp(100 - risk_rating)
 
 
-def classify_svi(total: float, cfg: SVIConfig = None) -> SVILevel:
-    """SVI 分级"""
+def classify_svi(total: float, cfg: SVIConfig = None, market: str = "US") -> SVILevel:
+    """SVI 分级（支持跨市场阈值）"""
     if cfg is None:
         cfg = settings.svi
-    if total >= cfg.core_threshold:
+    mp = MARKET_PARAMS.get(market)
+    core_thresh = mp.svi_threshold if mp else cfg.core_threshold
+    if total >= core_thresh:
         return SVILevel.CORE
     if total >= cfg.watch_threshold:
         return SVILevel.WATCH
@@ -168,6 +170,6 @@ def compute_svi(
         + result.substitution_risk_score * cfg.substitution_risk_weight
     )
 
-    # Step 3: 分级
-    result.level = classify_svi(result.total, cfg)
+    # Step 3: 分级（使用市场特定阈值）
+    result.level = classify_svi(result.total, cfg, market)
     return result

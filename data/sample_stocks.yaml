@@ -24,6 +24,10 @@ stocks:
       valuation_percentile: 0.70
       growth_concentration: 0.35
       reinvestment_declining_years: 0
+    acceleration:
+      penetration: [0.12, 0.18, 0.25, 0.34, 0.45]
+      cost_curve: [1.00, 0.82, 0.65, 0.50, 0.38]
+      capex: [22.0, 28.0, 35.0, 44.0, 55.0]
 
   - symbol: "NVDA"
     name: "NVIDIA"
@@ -47,6 +51,10 @@ stocks:
       valuation_percentile: 0.85
       growth_concentration: 0.50
       reinvestment_declining_years: 0
+    acceleration:
+      penetration: [0.05, 0.10, 0.20, 0.35, 0.55]
+      cost_curve: [1.00, 0.70, 0.45, 0.28, 0.18]
+      capex: [15.0, 22.0, 35.0, 52.0, 78.0]
 
   - symbol: "V"
     name: "Visa"
@@ -70,6 +78,9 @@ stocks:
       valuation_percentile: 0.65
       growth_concentration: 0.25
       reinvestment_declining_years: 0
+    acceleration:
+      penetration: [0.55, 0.58, 0.61, 0.63, 0.65]
+      capex: [8.0, 8.5, 9.0, 9.3, 9.5]
 
   - symbol: "UNH"
     name: "UnitedHealth"
@@ -93,6 +104,9 @@ stocks:
       valuation_percentile: 0.55
       growth_concentration: 0.20
       reinvestment_declining_years: 0
+    acceleration:
+      penetration: [0.16, 0.17, 0.18, 0.19, 0.20]
+      capex: [12.0, 12.8, 13.5, 14.0, 14.5]
 
   - symbol: "SPGI"
     name: "S&P Global"
@@ -116,6 +130,9 @@ stocks:
       valuation_percentile: 0.60
       growth_concentration: 0.30
       reinvestment_declining_years: 0
+    acceleration:
+      penetration: [0.40, 0.42, 0.44, 0.45, 0.46]
+      capex: [5.0, 5.2, 5.5, 5.6, 5.7]
 
   - symbol: "LLY"
     name: "Eli Lilly"
@@ -139,3 +156,7 @@ stocks:
       valuation_percentile: 0.90
       growth_concentration: 0.55
       reinvestment_declining_years: 0
+    acceleration:
+      penetration: [0.02, 0.05, 0.10, 0.18, 0.30]
+      cost_curve: [1.00, 0.85, 0.70, 0.55, 0.42]
+      capex: [6.0, 7.5, 9.0, 11.0, 14.0]

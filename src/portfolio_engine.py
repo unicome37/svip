@@ -9,7 +9,8 @@ from datetime import datetime
 
 from config.settings import settings
 from src.models import (
-    SVIPStock, SVILevel, PortfolioAllocation, MacroState,
+    SVIPStock, SVILevel, ValuationTier, PhaseState,
+    PortfolioAllocation, MacroState,
     TailRiskResult, RotationSignal, SVIPReport,
 )
 from src.weight_engine import compute_portfolio_weights
@@ -30,8 +31,8 @@ def classify_pools(stocks: List[SVIPStock]) -> tuple[list, list, list]:
         phase = s.acceleration.phase if s.acceleration else None
 
         if (svi_level == SVILevel.CORE
-                and val_tier != "C"
-                and phase != "decaying"):
+                and val_tier != ValuationTier.C
+                and phase != PhaseState.DECAYING):
             s.pool = SVILevel.CORE
             core.append(s)
         elif svi_level in (SVILevel.CORE, SVILevel.WATCH):
@@ -50,30 +51,29 @@ def determine_cash_level(
     """根据市场状态确定现金水平"""
     cfg = settings.weight
 
-    # 统计 ValuationTier=A 的标的数量
+    core_stocks = [s for s in stocks if s.pool == SVILevel.CORE]
+
+    # 统计 ValuationTier=A 的标的数量（仅 Core 池）
     tier_a_count = sum(
-        1 for s in stocks
-        if s.valuation and s.valuation.tier.value == "A"
-        and s.pool == SVILevel.CORE
+        1 for s in core_stocks
+        if s.valuation and s.valuation.tier == ValuationTier.A
     )
 
-    # 统计加速期标的
+    # 统计加速期标的（仅 Core 池）
     accel_count = sum(
-        1 for s in stocks
-        if s.acceleration and s.acceleration.phase.value == "accelerating"
-        and s.pool == SVILevel.CORE
-        and (s.valuation is None or s.valuation.tier.value != "C")
+        1 for s in core_stocks
+        if s.acceleration and s.acceleration.phase == PhaseState.ACCELERATING
+        and (s.valuation is None or s.valuation.tier != ValuationTier.C)
     )
 
-    # 统计估值脆弱标的
+    # 统计估值脆弱标的（仅 Core 池内计算比率）
     tier_c_ratio = 0.0
-    total = len([s for s in stocks if s.svi and s.svi.level == SVILevel.CORE])
-    if total > 0:
+    if core_stocks:
         tier_c_count = sum(
-            1 for s in stocks
-            if s.valuation and s.valuation.tier.value == "C"
+            1 for s in core_stocks
+            if s.valuation and s.valuation.tier == ValuationTier.C
         )
-        tier_c_ratio = tier_c_count / total
+        tier_c_ratio = tier_c_count / len(core_stocks)
 
     # 现金规则
     if tier_c_ratio > 0.6:
@@ -126,10 +126,32 @@ def check_violations(
     return violations
 
 
+def apply_rotation_adjustments(
+    stocks: List[SVIPStock],
+    rotation_signals: List[RotationSignal],
+) -> List[SVIPStock]:
+    """
+    将 A8 轮动信号的权重调整应用到组合中。
+    按主题桶调整权重，并确保调整后不出现负权重。
+    """
+    if not rotation_signals:
+        return stocks
+
+    signal_map = {sig.theme: sig.weight_adjustment for sig in rotation_signals}
+
+    for s in stocks:
+        adj = signal_map.get(s.theme, 0.0)
+        if adj != 0.0 and s.target_weight > 0:
+            s.target_weight = max(0.0, s.target_weight * (1.0 + adj))
+
+    return stocks
+
+
 def build_allocation(
     stocks: List[SVIPStock],
     macro: Optional[MacroState] = None,
     tail_risk: Optional[TailRiskResult] = None,
+    market: str = "US",
 ) -> PortfolioAllocation:
     """
     构建完整组合配置。
@@ -138,8 +160,9 @@ def build_allocation(
     1. 分池（Core / Watch / Block）
     2. 确定现金水平
     3. 计算目标权重（含宏观/尾部风险修正）
-    4. 计算暴露
-    5. 违规检查
+    4. 应用 A8 轮动调整
+    5. 计算暴露
+    6. 违规检查
     """
     # 1. 分池
     core, watch, block = classify_pools(stocks)
@@ -159,9 +182,14 @@ def build_allocation(
         target_equity=target_equity,
         macro_risk_factor=mrf,
         tail_risk_factor=trf,
+        market=market,
     )
 
-    # 5. 汇总
+    # 5. A8 轮动调整
+    rotation_signals = compute_rotation_signals(all_stocks)
+    all_stocks = apply_rotation_adjustments(all_stocks, rotation_signals)
+
+    # 6. 汇总
     allocation = PortfolioAllocation(
         timestamp=datetime.now(),
         stocks=all_stocks + block,
@@ -173,14 +201,18 @@ def build_allocation(
 
     # 计算暴露
     allocation.total_equity = sum(s.target_weight for s in all_stocks)
-    allocation.cash_weight = 1.0 - allocation.total_equity
+    allocation.cash_weight = max(0.0, 1.0 - allocation.total_equity)
     allocation.core_pool_weight = sum(
         s.target_weight for s in all_stocks if s.pool == SVILevel.CORE
     )
     allocation.watch_pool_weight = sum(
         s.target_weight for s in all_stocks if s.pool == SVILevel.WATCH
     )
-    allocation.final_equity_ceiling = target_equity * mrf * trf
+    # final_equity_ceiling 与 weight_engine 中实际使用的 adjusted_equity 一致
+    cfg = settings.weight
+    allocation.final_equity_ceiling = min(
+        target_equity * mrf * trf, cfg.core_pool_max
+    )
 
     # 主题暴露
     for s in all_stocks:
@@ -195,7 +227,7 @@ def build_allocation(
                 allocation.sector_exposure.get(s.sector, 0) + s.target_weight
             )
 
-    # 6. 违规检查
+    # 7. 违规检查
     allocation.violations = check_violations(allocation)
 
     return allocation
@@ -208,8 +240,11 @@ def generate_report(
     market: str = "US",
 ) -> SVIPReport:
     """生成完整 SVIP 报告"""
-    allocation = build_allocation(stocks, macro, tail_risk)
-    rotation_signals = compute_rotation_signals(stocks)
+    allocation = build_allocation(stocks, macro, tail_risk, market)
+    # rotation_signals 已在 build_allocation 中计算并应用
+    rotation_signals = compute_rotation_signals(
+        [s for s in allocation.stocks if s.pool in (SVILevel.CORE, SVILevel.WATCH)]
+    )
 
     core = [s for s in allocation.stocks if s.pool == SVILevel.CORE]
     watch = [s for s in allocation.stocks if s.pool == SVILevel.WATCH]

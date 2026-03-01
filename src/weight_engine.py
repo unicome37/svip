@@ -5,7 +5,7 @@ W_raw = Q × V × P（质量因子 × 估值因子 × 相位因子）
 然后做归一化 + 约束投影（单票/行业/主题桶上限）。
 """
 from typing import List, Dict
-from config.settings import settings, WeightConfig
+from config.settings import settings, WeightConfig, MARKET_PARAMS
 from src.models import (
     SVIPStock, SVILevel, ValuationTier, PhaseState, PoolAction,
 )
@@ -68,32 +68,44 @@ def normalize_weights(
 def apply_constraints(
     stocks: List[SVIPStock],
     cfg: WeightConfig = None,
+    market: str = "US",
 ) -> List[SVIPStock]:
     """
     约束投影：按顺序执行。
-    1. 单票上限 8%
-    2. 单慢变量桶上限 30%
+    1. 单票上限 8%（跨市场适配）
+    2. 单慢变量桶上限 30%（跨市场适配）
     3. 单行业上限 25%
     超出部分按比例缩放。
     """
     if cfg is None:
         cfg = settings.weight
 
-    # 约束1：单票上限
-    overflow = 0.0
-    active_count = sum(1 for s in stocks if 0 < s.target_weight <= cfg.single_stock_max)
-    for s in stocks:
-        if s.target_weight > cfg.single_stock_max:
-            overflow += s.target_weight - cfg.single_stock_max
-            s.target_weight = cfg.single_stock_max
-    # 溢出部分按比例分配给未超限标的
-    if overflow > 0 and active_count > 0:
+    # 跨市场适配约束
+    mp = MARKET_PARAMS.get(market)
+    stock_max = mp.single_stock_max if mp else cfg.single_stock_max
+    theme_max = mp.theme_bucket_max if mp else cfg.theme_bucket_max
+
+    # 约束1：单票上限（迭代直到收敛）
+    for _ in range(10):  # 最多迭代10轮防无限循环
+        overflow = 0.0
         for s in stocks:
-            if 0 < s.target_weight < cfg.single_stock_max:
-                s.target_weight += overflow / active_count
+            if s.target_weight > stock_max:
+                overflow += s.target_weight - stock_max
+                s.target_weight = stock_max
+        if overflow < 1e-6:
+            break
+        # 溢出部分按原始权重比例分配给未超限标的
+        eligible = [s for s in stocks if 0 < s.target_weight < stock_max]
+        if not eligible:
+            break
+        total_eligible = sum(s.target_weight for s in eligible)
+        if total_eligible <= 0:
+            break
+        for s in eligible:
+            s.target_weight += overflow * (s.target_weight / total_eligible)
 
     # 约束2：慢变量桶上限
-    _apply_group_cap(stocks, key="theme", cap=cfg.theme_bucket_max)
+    _apply_group_cap(stocks, key="theme", cap=theme_max)
 
     # 约束3：行业上限
     _apply_group_cap(stocks, key="sector", cap=cfg.sector_max)
@@ -183,6 +195,7 @@ def compute_portfolio_weights(
     target_equity: float = 0.75,
     macro_risk_factor: float = 1.0,
     tail_risk_factor: float = 1.0,
+    market: str = "US",
     cfg: WeightConfig = None,
 ) -> List[SVIPStock]:
     """
@@ -191,7 +204,7 @@ def compute_portfolio_weights(
     1. 计算原始权重 W_raw = Q × V × P
     2. 归一化到目标仓位
     3. 应用宏观/尾部风险修正
-    4. 约束投影
+    4. 约束投影（跨市场适配）
     5. 确定行动
     """
     if cfg is None:
@@ -204,7 +217,7 @@ def compute_portfolio_weights(
     # 流程
     stocks = compute_raw_weights(stocks, cfg)
     stocks = normalize_weights(stocks, adjusted_equity)
-    stocks = apply_constraints(stocks, cfg)
+    stocks = apply_constraints(stocks, cfg, market)
     stocks = determine_actions(stocks, cfg)
 
     return stocks

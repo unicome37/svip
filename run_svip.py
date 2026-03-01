@@ -27,6 +27,7 @@ from src.macro_filter import compute_macro_state
 from src.tail_risk import compute_tail_risk
 from src.portfolio_engine import generate_report
 from src.report_generator import generate_markdown_report, save_report
+from src.data_loader import validate_stock_themes
 
 
 def load_yaml(path: str) -> dict:
@@ -34,10 +35,50 @@ def load_yaml(path: str) -> dict:
         return yaml.safe_load(f)
 
 
+def validate_stock_data(item: dict) -> list[str]:
+    """校验单只股票输入数据，返回警告列表"""
+    warnings = []
+    symbol = item.get("symbol", "UNKNOWN")
+    fin = item.get("financials", {})
+    val = item.get("valuation", {})
+
+    # 财务数据范围检查
+    roic = fin.get("roic_10y_median", 0)
+    if not (-0.5 <= roic <= 1.0):
+        warnings.append(f"{symbol}: roic_10y_median={roic} 超出合理范围 [-0.5, 1.0]")
+
+    fcf = fin.get("fcf_conversion", 0)
+    if not (-1.0 <= fcf <= 3.0):
+        warnings.append(f"{symbol}: fcf_conversion={fcf} 超出合理范围 [-1.0, 3.0]")
+
+    gm_std = fin.get("gross_margin_std", 0)
+    if not (0 <= gm_std <= 1.0):
+        warnings.append(f"{symbol}: gross_margin_std={gm_std} 超出合理范围 [0, 1.0]")
+
+    # 估值数据范围检查
+    fcf_yield = val.get("fcf_yield", 0)
+    if not (-0.5 <= fcf_yield <= 1.0):
+        warnings.append(f"{symbol}: fcf_yield={fcf_yield} 超出合理范围 [-0.5, 1.0]")
+
+    pe = val.get("pe_ratio", 0)
+    if pe < 0:
+        warnings.append(f"{symbol}: pe_ratio={pe} 为负值")
+
+    growth = val.get("growth_rate", 0)
+    if not (-1.0 <= growth <= 5.0):
+        warnings.append(f"{symbol}: growth_rate={growth} 超出合理范围 [-1.0, 5.0]")
+
+    return warnings
+
+
 def build_stocks_from_yaml(data: dict) -> list[SVIPStock]:
     """从 YAML 数据构建 SVIPStock 列表"""
     stocks = []
+    all_warnings = []
     for item in data.get("stocks", []):
+        # 输入校验
+        warnings = validate_stock_data(item)
+        all_warnings.extend(warnings)
         fin = item.get("financials", {})
         val = item.get("valuation", {})
 
@@ -68,10 +109,15 @@ def build_stocks_from_yaml(data: dict) -> list[SVIPStock]:
             reinvestment_declining_years=val.get("reinvestment_declining_years", 0),
         )
 
-        # Step 3: A2 加速检测（使用默认稳态，实际需要时间序列数据）
+        # Step 3: A2 加速检测（从YAML读取时间序列数据）
+        accel_data = item.get("acceleration", {})
         acceleration = compute_acceleration_score(
             symbol=item["symbol"],
             theme=item.get("theme", ""),
+            penetration_series=accel_data.get("penetration"),
+            cost_curve_series=accel_data.get("cost_curve"),
+            capex_series=accel_data.get("capex"),
+            policy_series=accel_data.get("policy"),
         )
 
         stock = SVIPStock(
@@ -85,6 +131,11 @@ def build_stocks_from_yaml(data: dict) -> list[SVIPStock]:
             acceleration=acceleration,
         )
         stocks.append(stock)
+
+    if all_warnings:
+        print("\n⚠️  输入数据校验警告:")
+        for w in all_warnings:
+            print(f"   {w}")
 
     return stocks
 
@@ -127,6 +178,15 @@ def main():
 
     print(f"📊 加载股票数据: {args.stocks}")
     stock_data = load_yaml(stocks_path)
+
+    # 校验主题桶
+    data_dir = os.path.join(base_dir, "data")
+    theme_warnings = validate_stock_themes(stock_data.get("stocks", []), data_dir)
+    if theme_warnings:
+        print("\n⚠️  主题桶校验警告:")
+        for w in theme_warnings:
+            print(f"   {w}")
+
     stocks = build_stocks_from_yaml(stock_data)
     print(f"   共 {len(stocks)} 只股票")
 
